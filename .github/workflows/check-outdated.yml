@@ -5,7 +5,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 0 * * *'  # 每天執行一次
+    - cron: '0 0 * * *'  # 每天自動執行一次
   workflow_dispatch:
 
 jobs:
@@ -13,17 +13,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository (for scripts and pages)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Checkout translated-content
         uses: actions/checkout@v4
         with:
           repository: 'mdn/translated-content'
           path: 'translated-content'
+          fetch-depth: 0
 
       - name: Checkout content
         uses: actions/checkout@v4
         with:
           repository: 'mdn/content'
           path: 'content'
+          fetch-depth: 0
+
+      - name: Debug file structure
+        run: ls -R
+        continue-on-error: true
 
       - name: Set up Python
         uses: actions/setup-python@v4
