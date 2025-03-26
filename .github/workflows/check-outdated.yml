@@ -1,62 +1,43 @@
-name: Generate Diff and Deploy GitHub Pages
+name: Check MDN Outdated Files
 
 on:
   push:
     branches:
       - main
+  schedule:
+    - cron: '0 0 * * *'  # 每天執行一次
+  workflow_dispatch:  # 允許手動觸發
 
 jobs:
-  generate-diff:
+  check-outdated:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout mdn/translated-content
-        uses: actions/checkout@v2
+      - name: Checkout translated-content
+        uses: actions/checkout@v4
         with:
-          repository: mdn/translated-content
-          path: translated-content
+          repository: 'mdn/translated-content'
+          path: 'translated-content'
 
-      - name: Checkout mdn/content
-        uses: actions/checkout@v2
+      - name: Checkout content
+        uses: actions/checkout@v4
         with:
-          repository: mdn/content
-          path: content
-          fetch-depth: 0
+          repository: 'mdn/content'
+          path: 'content'
 
-      - name: Generate diff files
-        run: |
-          mkdir -p out/diffs
-          echo "<html><head><meta charset='utf-8'><title>Outdated Files Diff</title></head><body>" > out/index.html
-          echo "<h1>Outdated Files</h1><ul>" >> out/index.html
-          # 遍歷 translated-content/files/zh-tw 下所有 .md 檔案
-          for file in $(find translated-content/files/zh-tw -type f -name "*.md"); do
-            if grep -q "sourceCommit" "$file"; then
-              # 取得 sourceCommit 的 commit 雜湊值（假設格式為 sourceCommit: <commit-hash>）
-              sourceCommit=$(grep "sourceCommit" "$file" | head -n1 | cut -d':' -f2 | tr -d "[:space:]")
-              # 取得相對路徑，例如：translated-content/files/zh-tw/xxx.md 轉換成 xxx.md
-              relative_path=${file#translated-content/files/zh-tw/}
-              # 調整此處路徑，指向 mdn/content 的英文檔案 (en-us)
-              content_file="content/files/en-us/${relative_path}"
-              if [ -f "$content_file" ]; then
-                # 在 content 目錄下比對來源 commit 與目前 HEAD 的差異
-                diff_output=$(git -C content diff $sourceCommit HEAD -- "$content_file")
-                if [ -n "$diff_output" ]; then
-                  # 將檔案路徑中的斜線轉換成底線，以便作為檔名
-                  safe_name=$(echo "$relative_path" | sed 's/[\/\\]/_/g')
-                  diff_file="out/diffs/${safe_name}.diff"
-                  echo "$diff_output" > "$diff_file"
-                  echo "<li><a href='diffs/${safe_name}.diff'>${relative_path}</a></li>" >> out/index.html
-                fi
-              else
-                echo "檔案不存在：$content_file"
-              fi
-            else
-              echo "跳過檔案（無 sourceCommit）：$file"
-            fi
-          done
-          echo "</ul></body></html>" >> out/index.html
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./out
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install GitPython markdownify
+
+      - name: Generate outdated report
+        run: python generate_diff.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: outdated-diff-report
+          path: output/
