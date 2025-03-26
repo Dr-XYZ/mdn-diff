@@ -1,4 +1,4 @@
-name: Check MDN Outdated Files
+name: Check Outdated Translations
 
 on:
   push:
@@ -6,38 +6,37 @@ on:
       - main
   schedule:
     - cron: '0 0 * * *'  # 每天執行一次
-  workflow_dispatch:  # 允許手動觸發
 
 jobs:
-  check-outdated:
+  check_outdated:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout translated-content
         uses: actions/checkout@v4
         with:
-          repository: 'mdn/translated-content'
-          path: 'translated-content'
+          repository: mdn/translated-content
+          path: translated-content
+          fetch-depth: 0
 
-      - name: Checkout content
+      - name: Checkout original content
         uses: actions/checkout@v4
         with:
-          repository: 'mdn/content'
-          path: 'content'
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+          repository: mdn/content
+          path: content
+          fetch-depth: 0
 
       - name: Install dependencies
-        run: pip install GitPython markdownify
+        run: pip install ansi2html
 
-      - name: Generate outdated report
-        run: python generate_diff.py
+      - name: Check outdated translations
+        run: bash translated-content/scripts/check_outdated.sh
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: outdated-diff-report
-          path: output/
+      - name: Commit and push updates
+        run: |
+          cd translated-content
+          git config --local user.name "github-actions"
+          git config --local user.email "github-actions@github.com"
+          git add outdate_report
+          git commit -m "Update outdated translation report" || exit 0
+          git push
