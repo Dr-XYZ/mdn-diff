@@ -1,47 +1,73 @@
-name: Check Outdated Translations
+name: Check MDN Content Updates
 
 on:
   push:
-    branches:
-      - main
-  schedule:
-    - cron: '0 0 * * *'  # 每天執行一次
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  check_outdated:
+  check-updates:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout finddiff (this repo)
-        uses: actions/checkout@v4
-        with:
-          path: finddiff
-
-      - name: Checkout mdn/translated-content
-        uses: actions/checkout@v4
-        with:
-          repository: mdn/translated-content
-          path: translated-content
-          fetch-depth: 0
-
-      - name: Checkout mdn/content
-        uses: actions/checkout@v4
-        with:
-          repository: mdn/content
-          path: content
-          fetch-depth: 0
-
-      - name: Install dependencies
-        run: pip install ansi2html
-
-      - name: Check outdated translations
-        run: bash scripts/check_outdated.sh
-
-      - name: Commit and push updates
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Setup Git
         run: |
-          cd finddiff
-          git config --local user.name "github-actions"
-          git config --local user.email "github-actions@github.com"
-          git add outdate_report
-          git commit -m "Update outdated translation report" || exit 0
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+      - name: Clone MDN repositories
+        run: |
+          mkdir -p mdn
+          git clone --depth 1 https://github.com/mdn/translated-content.git mdn/translated-content
+          git clone --depth 1 https://github.com/mdn/content.git mdn/content
+          
+      - name: Check translated files and generate diff
+        run: |
+          #!/bin/bash
+          mkdir -p diff
+          echo "<html><body><h1>Outdated MDN Translations</h1><ul>" > index.html
+          
+          # Iterate through zh-tw files
+          for file in mdn/translated-content/files/zh-tw/**/*.md; do
+            if [ -f "$file" ]; then
+              # Check if sourceCommit exists
+              source_commit=$(grep -oP '(?<=sourceCommit: ).*' "$file")
+              
+              if [ -n "$source_commit" ]; then
+                # Get relative path
+                rel_path="${file#mdn/translated-content/files/zh-tw/}"
+                source_file="mdn/content/files/en-us/${rel_path}"
+                
+                if [ -f "$source_file" ]; then
+                  # Get diff
+                  cd mdn/content
+                  diff_result=$(git diff "$source_commit" HEAD -- "$source_file" || true)
+                  cd ../..
+                  
+                  if [ -n "$diff_result" ]; then
+                    # Create diff file
+                    diff_path="diff/${rel_path%.md}.html"
+                    mkdir -p "$(dirname "$diff_path")"
+                    
+                    echo "<html><body><h1>Diff for ${rel_path}</h1><pre>" > "$diff_path"
+                    echo "$diff_result" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' >> "$diff_path"
+                    echo "</pre></body></html>" >> "$diff_path"
+                    
+                    # Add to index
+                    echo "<li><a href=\"${diff_path}\">${rel_path}</a></li>" >> index.html
+                  fi
+                fi
+              fi
+            fi
+          done
+          
+          echo "</ul></body></html>" >> index.html
+          
+      - name: Commit and push changes
+        run: |
+          git add index.html diff/
+          git commit -m "Update outdated translations diff" || echo "No changes to commit"
           git push
