@@ -12,14 +12,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout translated-content
+      - name: Checkout finddiff (this repo)
+        uses: actions/checkout@v4
+        with:
+          path: finddiff
+
+      - name: Checkout mdn/translated-content
         uses: actions/checkout@v4
         with:
           repository: mdn/translated-content
           path: translated-content
           fetch-depth: 0
 
-      - name: Checkout original content
+      - name: Checkout mdn/content
         uses: actions/checkout@v4
         with:
           repository: mdn/content
@@ -30,11 +35,11 @@ jobs:
         run: pip install ansi2html
 
       - name: Check outdated translations
-        run: bash translated-content/scripts/check_outdated.sh
+        run: bash finddiff/scripts/check_outdated.sh
 
       - name: Commit and push updates
         run: |
-          cd translated-content
+          cd finddiff
           git config --local user.name "github-actions"
           git config --local user.email "github-actions@github.com"
           git add outdate_report
